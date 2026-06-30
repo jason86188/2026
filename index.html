@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>限定大頭貼頭框產生器</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; background: #f0f2f5; padding: 20px; margin: 0; }
+        .card { max-width: 450px; margin: 30px auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { color: #333; margin-bottom: 8px; }
+        p { color: #666; font-size: 14px; margin-bottom: 24px; }
+        #preview-box { position: relative; width: 280px; height: 280px; margin: 0 auto 24px auto; border: 2px dashed #ccc; border-radius: 12px; overflow: hidden; display: none; }
+        canvas { width: 100%; height: 100%; display: block; }
+        .btn { display: inline-block; width: 100%; max-width: 280px; padding: 12px 0; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; margin-bottom: 12px; }
+        .btn-upload { background: #007fff; color: white; }
+        .btn-upload:hover { background: #0066cc; }
+        .btn-download { background: #28a745; color: white; display: none; }
+        .btn-download:hover { background: #218838; }
+        input[type="file"] { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>專屬大頭貼產生器</h2>
+    <p>上傳照片，自動為你套用特製頭框！</p>
+    
+    <button class="btn btn-upload" onclick="document.getElementById('file-input').click()">1. 上傳我的照片</button>
+    <input type="file" id="file-input" accept="image/*">
+    
+    <div id="preview-box">
+        <canvas id="canvas" width="1000" height="1000"></canvas>
+    </div>
+    
+    <button class="btn btn-download" id="download-btn">2. 下載換大頭貼</button>
+</div>
+
+<script>
+    const fileInput = document.getElementById('file-input');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const previewBox = document.getElementById('preview-box');
+    const downloadBtn = document.getElementById('download-btn');
+
+    const frameImg = new Image();
+    frameImg.src = 'frame.png'; // 讀取你上傳的頭框
+
+    let userImg = new Image();
+
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => { userImg.src = event.target.result; };
+        reader.readAsDataURL(file);
+    });
+
+    userImg.onload = () => {
+        previewBox.style.display = 'block';
+        downloadBtn.style.display = 'inline-block';
+        
+        // 滿版裁切置中計算
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const scale = Math.max(canvas.width / userImg.width, canvas.height / userImg.height);
+        const x = (canvas.width / 2) - (userImg.width / 2) * scale;
+        const y = (canvas.height / 2) - (userImg.height / 2) * scale;
+        
+        ctx.drawImage(userImg, x, y, userImg.width * scale, userImg.height * scale);
+        ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+    };
+
+    downloadBtn.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = 'avatar.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
+</script>
+
+</body>
+</html>
