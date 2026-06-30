@@ -3,30 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>互動版大頭貼產生器</title>
+    <title>活動專屬大頭貼產生器</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; background: #f0f2f5; padding: 20px; margin: 0; touch-action: none; /* 防止 iOS 整頁橡皮筋效果 */ }
-        .card { max-width: 450px; margin: 20px auto; background: white; padding: 25px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); touch-action: auto; /* 恢復卡片內的滾動 */ }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; background: #f0f2f5; padding: 20px; margin: 0; touch-action: none; }
+        .card { max-width: 450px; margin: 20px auto; background: white; padding: 25px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); touch-action: auto; }
         h2 { color: #333; margin: 0 0 8px 0; font-size: 20px; }
         p { color: #666; font-size: 14px; margin: 0 0 20px 0; }
         
-        /* 畫布區域：手機與電腦共用 */
-        #stage-container { position: relative; width: 300px; height: 300px; margin: 0 auto 15px auto; border: 2px dashed #ccc; border-radius: 12px; overflow: hidden; display: none; background: #f9f9f9; cursor: move; /* 提示可以拖曳 */ }
-        canvas { display: none; } /* 隱藏原本畫布 */
-        #final-image { width: 100%; height: 100%; display: block; -webkit-touch-callout: default; /* 確保 iOS 可長按 */ }
+        #stage-container { position: relative; width: 300px; height: 300px; margin: 0 auto 15px auto; border: 2px dashed #ccc; border-radius: 12px; overflow: hidden; display: none; background: #f9f9f9; cursor: move; }
+        canvas { display: none; } 
+        #final-image { width: 100%; height: 100%; display: block; -webkit-touch-callout: default; }
 
-        /* 縮放滑桿區域 */
         #control-container { display: none; width: 300px; margin: 0 auto 20px auto; }
         .label-text { font-size: 12px; color: #888; margin-bottom: 5px; display: block; text-align: left; }
         #scale-slider { width: 100%; margin: 0; cursor: pointer; }
 
-        /* 按鈕與提示 */
         .btn { display: inline-block; width: 100%; max-width: 280px; padding: 12px 0; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; text-decoration: none; }
         .btn-upload { background: #007fff; color: white; margin-bottom: 15px; }
         .btn-upload:hover { background: #0066cc; }
-        .btn-download { background: #28a745; color: white; display: none; } /* 電腦版專用下載 */
+        .btn-download { background: #28a745; color: white; display: none; } 
         .btn-download:hover { background: #218838; }
-        .tip-text { color: #e44d26; font-size: 14px; font-weight: bold; display: none; margin-top: 10px; } /* 手機版專用提示 */
+        .tip-text { color: #e44d26; font-size: 14px; font-weight: bold; display: none; margin-top: 10px; } 
         
         input[type="file"] { display: none; }
     </style>
@@ -66,75 +63,78 @@
     const downloadBtn = document.getElementById('download-btn');
     const phoneTip = document.getElementById('phone-tip');
 
+    // 【重要：請將下方 'my_event_2026' 改成你自己的活動英文代號，不可有中文】
+    const EVENT_KEY = 'my_event_2026'; 
+
     const frameImg = new Image();
-    frameImg.src = 'frame.png'; // 讀取你的頭框
+    frameImg.src = 'frame.png'; 
 
     let userImg = new Image();
-    
-    // 圖片狀態變數
-    let imgState = {
-        loaded: false,
-        x: 0, // 圖片中心 X 位置
-        y: 0, // 圖片中心 Y 位置
-        baseScale: 1, // 初始滿版縮放比例
-        userScale: 1, // 使用者調整的縮放倍率 (1 = baseScale)
-        currentX: 0, // 拖曳中的臨時位置
-        currentY: 0,
-        currentPinchScale: 1 // 雙指縮放中的臨時倍率
-    };
+    let imgState = { loaded: false, x: 0, y: 0, baseScale: 1, userScale: 1, currentX: 0, currentY: 0, currentPinchScale: 1 };
 
-    // 1. 初始化與設備檢測
-    window.onload = () => {
-        // 簡單偵測是否為行動設備
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        
-        // 確保頭框加載完成
-        frameImg.onload = () => {
-            if (imgState.loaded) draw();
-        };
-    };
-
-    // 2. 上傳照片處理
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
+
+        // 觸發統計人數（只要選了照片就 +1）
+        fetch(`https://api.countapi.xyz/hit/${EVENT_KEY}/clicks`).catch(err => console.log(err));
+
         const reader = new FileReader();
         reader.onload = (event) => {
-            userImg.onload = () => {
-                resetImageState();
-                stageContainer.style.display = 'block';
-                controlContainer.style.display = 'block';
-                
-                // 根據設備顯示不同按鈕
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                if (isMobile) {
-                    phoneTip.style.display = 'block';
-                    downloadBtn.style.display = 'none';
-                } else {
-                    downloadBtn.style.display = 'inline-block';
-                    phoneTip.style.display = 'none';
+            const tempImg = new Image();
+            tempImg.onload = () => {
+                // --- 核心防死機安全機制：動態壓縮大圖 ---
+                const maxCanvasSize = 1200; // 限制最大讀取尺寸
+                let width = tempImg.width;
+                let height = tempImg.height;
+
+                if (width > maxCanvasSize || height > maxCanvasSize) {
+                    if (width > height) {
+                        height *= maxCanvasSize / width;
+                        width = maxCanvasSize;
+                    } else {
+                        width *= maxCanvasSize / height;
+                        height = maxCanvasSize;
+                    }
                 }
-                
-                draw();
+
+                // 建立一個隱形的畫布來縮小照片
+                const compressCanvas = document.createElement('canvas');
+                compressCanvas.width = width;
+                compressCanvas.height = height;
+                const compressCtx = compressCanvas.getContext('2d');
+                compressCtx.drawImage(tempImg, 0, 0, width, height);
+
+                // 將壓縮後的安全圖片交給主程式
+                userImg.onload = () => {
+                    resetImageState();
+                    stageContainer.style.display = 'block';
+                    controlContainer.style.display = 'block';
+                    
+                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                    if (isMobile) {
+                        phoneTip.style.display = 'block';
+                        downloadBtn.style.display = 'none';
+                    } else {
+                        downloadBtn.style.display = 'inline-block';
+                        phoneTip.style.display = 'none';
+                    }
+                    draw();
+                };
+                userImg.src = compressCanvas.toDataURL('image/jpeg', 0.85); // 壓縮為 85% 品質的 JPG，極度省記憶體
             };
-            userImg.src = event.target.result;
+            tempImg.src = event.target.result;
         };
         reader.readAsDataURL(file);
     });
 
-    // 重設圖片狀態，預設滿版置中
     function resetImageState() {
         imgState.loaded = true;
-        
-        // 計算滿版所需的初始縮放比例
         const scaleW = canvas.width / userImg.width;
         const scaleH = canvas.height / userImg.height;
         imgState.baseScale = Math.max(scaleW, scaleH);
-        
-        imgState.userScale = 1; // 重設使用者縮放為 1 倍
-        scaleSlider.value = 100; // 重設滑桿
-        
-        // 置中
+        imgState.userScale = 1; 
+        scaleSlider.value = 100; 
         imgState.x = canvas.width / 2;
         imgState.y = canvas.height / 2;
         imgState.currentX = 0;
@@ -142,63 +142,35 @@
         imgState.currentPinchScale = 1;
     }
 
-    // 3. 核心繪製函數 (將畫布轉為圖片)
     function draw() {
         if (!imgState.loaded || !frameImg.complete) return;
-
-        // 清空畫布
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // 套用變換 (移動與縮放)
         ctx.save();
-        
         const finalScale = imgState.baseScale * imgState.userScale * imgState.currentPinchScale;
         const finalX = imgState.x + imgState.currentX;
         const finalY = imgState.y + imgState.currentY;
         
-        // 移動畫布原點到圖片中心點，進行縮放和移動，再移回來
         ctx.translate(finalX, finalY);
         ctx.scale(finalScale, finalScale);
-        
-        // 畫上使用者照片 (繪製時要將原點偏回到圖片左上角)
         ctx.drawImage(userImg, -userImg.width / 2, -userImg.height / 2);
-        
         ctx.restore();
-
-        // 疊加頭框 (固定在最上方)
         ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
-        
-        // 重點：將 Canvas 結果更新到手機看到的 <img>
         finalImage.src = canvas.toDataURL('image/png');
     }
 
-    // 4. 電腦版滑桿縮放
     scaleSlider.addEventListener('input', (e) => {
         imgState.userScale = e.target.value / 100;
         draw();
     });
 
-    // 5. 行動端/電腦端滑動匹配 (使用 Hammer.js)
-    const mc = new Hammer.Manager(finalImage); // 監聽使用者看到的圖片
-    
-    // 設定 Hammer 辨識器
+    const mc = new Hammer.Manager(finalImage);
     const Pan = new Hammer.Pan({ threshold: 0 });
     const Pinch = new Hammer.Pinch({ threshold: 0 });
-    
-    // Pinch 依賴 Pan，防止衝突
     Pinch.recognizeWith(Pan);
-    
     mc.add([Pan, Pinch]);
-
-    // 拖曳事件 (Pan)
-    mc.on("panstart", () => {
-        if (!imgState.loaded) return;
-        stageContainer.style.cursor = 'grabbing';
-    });
 
     mc.on("panmove", (e) => {
         if (!imgState.loaded) return;
-        // 將 CSS 尺寸轉為 Canvas 實際尺寸 (CSS 300px = Canvas 1000px)
         const cssToCanvasScale = canvas.width / stageContainer.offsetWidth;
         imgState.currentX = e.deltaX * cssToCanvasScale;
         imgState.currentY = e.deltaY * cssToCanvasScale;
@@ -207,49 +179,32 @@
 
     mc.on("panend pancancel", () => {
         if (!imgState.loaded) return;
-        stageContainer.style.cursor = 'move';
-        // 結束時將臨時移動距離合併入狀態，並清空臨時距離
         imgState.x += imgState.currentX;
         imgState.y += imgState.currentY;
         imgState.currentX = 0;
         imgState.currentY = 0;
-        draw(); // 確保最終狀態更新
-    });
-
-    // 雙指縮放事件 (Pinch)
-    mc.on("pinchstart", () => {
-        if (!imgState.loaded) return;
+        draw();
     });
 
     mc.on("pinchmove", (e) => {
         if (!imgState.loaded) return;
-        imgState.currentPinchScale = e.scale; // Hammer 的 e.scale 是相對於 start 的比例
+        imgState.currentPinchScale = e.scale;
         draw();
-        
-        // 同步更新滑桿 (選擇性)
         let newSliderValue = imgState.userScale * e.scale * 100;
         scaleSlider.value = Math.max(10, Math.min(200, newSliderValue));
     });
 
     mc.on("pinchend pinchcancel", () => {
         if (!imgState.loaded) return;
-        // 結束時將臨時縮放合併入狀態
         imgState.userScale = imgState.userScale * imgState.currentPinchScale;
-        imgState.currentPinchScale = 1; // 清空臨時比例
-        
-        // 限制縮放範圍，防止縮太小找不到了
+        imgState.currentPinchScale = 1;
         if(imgState.userScale < 0.1) imgState.userScale = 0.1;
         if(imgState.userScale > 3) imgState.userScale = 3;
-        
         draw();
     });
 
-    // 6. 電腦版下載按鈕邏輯
     downloadBtn.addEventListener('click', (e) => {
-        if (!imgState.loaded) {
-            e.preventDefault();
-            return;
-        }
+        if (!imgState.loaded) { e.preventDefault(); return; }
         downloadBtn.href = canvas.toDataURL('image/png');
         downloadBtn.download = 'my_avatar.png';
     });
