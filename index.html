@@ -10,12 +10,12 @@
         h2 { color: #333; margin-bottom: 8px; }
         p { color: #666; font-size: 14px; margin-bottom: 24px; }
         #preview-box { position: relative; width: 280px; height: 280px; margin: 0 auto 24px auto; border: 2px dashed #ccc; border-radius: 12px; overflow: hidden; display: none; }
-        canvas { width: 100%; height: 100%; display: block; }
+        canvas { display: none; } /* 隱藏原本的 canvas */
+        #final-image { width: 100%; height: 100%; display: block; } /* 顯示真正的圖片供長按儲存 */
         .btn { display: inline-block; width: 100%; max-width: 280px; padding: 12px 0; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; margin-bottom: 12px; }
         .btn-upload { background: #007fff; color: white; }
         .btn-upload:hover { background: #0066cc; }
-        .btn-download { background: #28a745; color: white; display: none; }
-        .btn-download:hover { background: #218838; }
+        .tip-text { color: #e44d26; font-size: 14px; font-weight: bold; display: none; margin-top: 10px; }
         input[type="file"] { display: none; }
     </style>
 </head>
@@ -30,9 +30,10 @@
     
     <div id="preview-box">
         <canvas id="canvas" width="1000" height="1000"></canvas>
+        <img id="final-image" alt="大頭貼成品">
     </div>
     
-    <button class="btn btn-download" id="download-btn">2. 下載換大頭貼</button>
+    <div id="tip" class="tip-text">🎉 製作完成！請「長按上方圖片」並選擇儲存至相簿。</div>
 </div>
 
 <script>
@@ -40,10 +41,11 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const previewBox = document.getElementById('preview-box');
-    const downloadBtn = document.getElementById('download-btn');
+    const finalImage = document.getElementById('final-image');
+    const tipText = document.getElementById('tip');
 
     const frameImg = new Image();
-    frameImg.src = 'frame.png'; // 讀取你上傳的頭框
+    frameImg.src = 'frame.png'; 
 
     let userImg = new Image();
 
@@ -57,9 +59,8 @@
 
     userImg.onload = () => {
         previewBox.style.display = 'block';
-        downloadBtn.style.display = 'inline-block';
+        tipText.style.display = 'block';
         
-        // 滿版裁切置中計算
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const scale = Math.max(canvas.width / userImg.width, canvas.height / userImg.height);
         const x = (canvas.width / 2) - (userImg.width / 2) * scale;
@@ -67,14 +68,10 @@
         
         ctx.drawImage(userImg, x, y, userImg.width * scale, userImg.height * scale);
         ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
-    };
 
-    downloadBtn.addEventListener('click', () => {
-        const link = document.createElement('a');
-        link.download = 'avatar.png';
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-    });
+        // 重點：將畫布轉換為真正的圖片格式，塞進 <img> 標籤中
+        finalImage.src = canvas.toDataURL('image/png');
+    };
 </script>
 
 </body>
