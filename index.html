@@ -25,7 +25,7 @@
         .btn { display: inline-block; width: 100%; max-width: 280px; padding: 12px 0; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; text-decoration: none; margin-bottom: 12px; }
         .btn-upload { background: #007fff; color: white; }
         .btn-upload:hover { background: #0066cc; }
-        .btn-confirm { background: #ff9500; color: white; display: none; } /* 確認按鈕 */
+        .btn-confirm { background: #ff9500; color: white; display: none; } 
         .btn-confirm:hover { background: #e08400; }
         .btn-download { background: #28a745; color: white; display: none; } 
         .btn-download:hover { background: #218838; }
@@ -54,9 +54,7 @@
     </div>
     
     <button class="btn btn-confirm" id="confirm-btn">2. 調整好了，確認製作</button>
-    
     <a href="#" class="btn btn-download" id="download-btn">2. 下載換大頭貼</a>
-    
     <div id="phone-tip" class="tip-text">🎉 大頭貼製作完成！<br>請「長按上方圖片」選擇儲存至相簿。</div>
 </div>
 
@@ -71,7 +69,7 @@
     const controlContainer = document.getElementById('control-container');
     const confirmBtn = document.getElementById('confirm-btn');
     const downloadBtn = document.getElementById('download-btn');
-    const phoneTip = document.getElementById('phone-tip');
+    const phoneTip = document.getElementById('phone-tip'); // 修正點 2：對應正確的 ID
 
     const EVENT_KEY = 'yungching_2026_rewards'; 
 
@@ -81,13 +79,14 @@
     let userImg = new Image();
     let imgState = { loaded: false, x: 0, y: 0, baseScale: 1, userScale: 1, currentX: 0, currentY: 0, currentPinchScale: 1 };
     let mc; 
-    let isLocked = false; // 是否鎖定不允許調整
+    let isLocked = false; 
 
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        fetch(`https://api.countapi.xyz/hit/${EVENT_KEY}/clicks`).catch(err => console.log(err));
+        // 修正點 3：替換為更穩定的 Moeator 計數器，避免原網址掛掉導致整個上傳卡死
+        fetch(`https://api.moeator.com/hit/${EVENT_KEY}/clicks`).catch(err => console.log(err));
 
         const reader = new FileReader();
         reader.onload = (event) => {
@@ -114,8 +113,8 @@
                 compressCtx.drawImage(tempImg, 0, 0, width, height);
 
                 userImg.onload = () => {
-                    isLocked = false; // 開放調整
-                    phoneTip.style.display = 'none'; // 隱藏提示
+                    isLocked = false; 
+                    phoneTip.style.display = 'none'; 
                     
                     resetImageState();
                     stageContainer.style.display = 'block';
@@ -123,11 +122,11 @@
                     
                     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
                     if (isMobile) {
-                        confirmBtn.style.display = 'inline-block'; // 顯示確認鍵
+                        confirmBtn.style.display = 'inline-block'; 
                         downloadBtn.style.display = 'none';
                     } else {
                         confirmBtn.style.display = 'none';
-                        downloadBtn.style.display = 'inline-block'; // 電腦版直接顯示下載
+                        downloadBtn.style.display = 'inline-block'; 
                     }
                     
                     initPanPinch手勢(); 
@@ -147,4 +146,117 @@
         imgState.baseScale = Math.max(scaleW, scaleH);
         imgState.userScale = 1; 
         scaleSlider.value = 100; 
-        imgState.
+        imgState.x = canvas.width / 2;
+        imgState.y = canvas.height / 2;
+        imgState.currentX = 0;
+        imgState.currentY = 0;
+        imgState.currentPinchScale = 1;
+    }
+
+    function draw(forceGenerateImage = false) {
+        if (!imgState.loaded || !frameImg.complete) return;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        const finalScale = imgState.baseScale * imgState.userScale * imgState.currentPinchScale;
+        const finalX = imgState.x + imgState.currentX;
+        const finalY = imgState.y + imgState.currentY;
+        
+        ctx.translate(finalX, finalY);
+        ctx.scale(finalScale, finalScale);
+        ctx.drawImage(userImg, -userImg.width / 2, -userImg.height / 2);
+        ctx.restore();
+        ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+
+        if (forceGenerateImage || isLocked) {
+            finalImage.src = canvas.toDataURL('image/png');
+            stageContainer.className = 'idle';
+        }
+    }
+
+    function startInteraction() {
+        if (!imgState.loaded || isLocked) return;
+        stageContainer.className = 'interacting';
+    }
+
+    scaleSlider.addEventListener('input', (e) => {
+        if (isLocked) return;
+        startInteraction();
+        imgState.userScale = e.target.value / 100;
+        draw(false);
+    });
+    scaleSlider.addEventListener('change', () => {
+        if (isLocked) return;
+        draw(true); 
+    });
+
+    confirmBtn.addEventListener('click', () => {
+        if (!imgState.loaded) return;
+        
+        isLocked = true; 
+        if (mc) { mc.destroy(); mc = null; } 
+        
+        draw(true); 
+        
+        controlContainer.style.display = 'none'; 
+        confirmBtn.style.display = 'none'; 
+        phoneTip.style.display = 'block'; 
+    });
+
+    function initPanPinch手勢() {
+        if (mc || isLocked) return; 
+        
+        mc = new Hammer.Manager(finalImage);
+        const Pan = new Hammer.Pan({ threshold: 0 });
+        const Pinch = new Hammer.Pinch({ threshold: 0 });
+        Pinch.recognizeWith(Pan);
+        mc.add([Pan, Pinch]);
+
+        mc.on("panstart pinchstart", () => {
+            startInteraction();
+        });
+
+        mc.on("panmove", (e) => {
+            if (!imgState.loaded || isLocked) return;
+            const cssToCanvasScale = canvas.width / stageContainer.offsetWidth;
+            imgState.currentX = e.deltaX * cssToCanvasScale;
+            imgState.currentY = e.deltaY * cssToCanvasScale;
+            draw(false); 
+        });
+
+        mc.on("panend pancancel", () => {
+            if (!imgState.loaded || isLocked) return;
+            imgState.x += imgState.currentX;
+            imgState.y += imgState.currentY;
+            imgState.currentX = 0;
+            imgState.currentY = 0;
+            draw(true); 
+        });
+
+        mc.on("pinchmove", (e) => {
+            if (!imgState.loaded || isLocked) return;
+            imgState.currentPinchScale = e.scale;
+            draw(false); 
+            let newSliderValue = imgState.userScale * e.scale * 100;
+            scaleSlider.value = Math.max(10, Math.min(200, newSliderValue));
+        });
+
+        mc.on("pinchend pinchcancel", () => {
+            if (!imgState.loaded || isLocked) return;
+            imgState.userScale = imgState.userScale * imgState.currentPinchScale;
+            imgState.currentPinchScale = 1;
+            if(imgState.userScale < 0.1) imgState.userScale = 0.1;
+            if(imgState.userScale > 3) imgState.userScale = 3;
+            draw(true); 
+        });
+    }
+
+    downloadBtn.addEventListener('click', (e) => {
+        if (!imgState.loaded) { e.preventDefault(); return; }
+        downloadBtn.href = canvas.toDataURL('image/png');
+        downloadBtn.download = 'my_avatar.png';
+    });
+</script>
+
+</body>
+</html>
