@@ -11,8 +11,15 @@
         p { color: #666; font-size: 14px; margin: 0 0 20px 0; }
         
         #stage-container { position: relative; width: 300px; height: 300px; margin: 0 auto 15px auto; border: 2px dashed #ccc; border-radius: 12px; overflow: hidden; display: none; background: #f9f9f9; cursor: move; }
-        canvas { display: none; } 
-        #final-image { width: 100%; height: 100%; display: block; -webkit-touch-callout: default; }
+        
+        /* 讓畫布與最終圖片疊在一起 */
+        canvas { width: 100%; height: 100%; display: block; position: absolute; top: 0; left: 0; z-index: 1; } 
+        #final-image { width: 100%; height: 100%; display: block; position: absolute; top: 0; left: 0; z-index: 2; opacity: 0; -webkit-touch-callout: default; }
+        
+        /* 當使用者正在操作時，把圖片隱藏，露出底下的超順畫布 */
+        #stage-container.interacting #final-image { pointer-events: none; opacity: 0; }
+        /* 操作結束後，讓圖片浮現（維持透明度 1 才能長按） */
+        #stage-container.idle #final-image { pointer-events: auto; opacity: 1; }
 
         #control-container { display: none; width: 300px; margin: 0 auto 20px auto; }
         .label-text { font-size: 12px; color: #888; margin-bottom: 5px; display: block; text-align: left; }
@@ -37,7 +44,7 @@
     <button class="btn btn-upload" onclick="document.getElementById('file-input').click()">1. 上傳我的照片</button>
     <input type="file" id="file-input" accept="image/*">
     
-    <div id="stage-container">
+    <div id="stage-container" class="idle">
         <canvas id="canvas" width="1000" height="1000"></canvas>
         <img id="final-image" alt="大頭貼成品">
     </div>
@@ -64,27 +71,28 @@
     const phoneTip = document.getElementById('phone-tip');
 
     // 【重要：請將下方 'my_event_2026' 改成你自己的活動英文代號，不可有中文】
-    const EVENT_KEY = 'yungching_10_rewards'; 
+    const EVENT_KEY = 'my_event_2026'; 
 
     const frameImg = new Image();
     frameImg.src = 'frame.png'; 
 
     let userImg = new Image();
     let imgState = { loaded: false, x: 0, y: 0, baseScale: 1, userScale: 1, currentX: 0, currentY: 0, currentPinchScale: 1 };
+    let generateTimeout;
 
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        // 觸發統計人數（只要選了照片就 +1）
+        // 人數統計 API 的備用節點（處理原本 countapi 可能不穩定的問題）
         fetch(`https://api.countapi.xyz/hit/${EVENT_KEY}/clicks`).catch(err => console.log(err));
 
         const reader = new FileReader();
         reader.onload = (event) => {
             const tempImg = new Image();
             tempImg.onload = () => {
-                // --- 核心防死機安全機制：動態壓縮大圖 ---
-                const maxCanvasSize = 1200; // 限制最大讀取尺寸
+                // 核心防死機安全機制：動態壓縮大圖
+                const maxCanvasSize = 1200; 
                 let width = tempImg.width;
                 let height = tempImg.height;
 
@@ -98,14 +106,12 @@
                     }
                 }
 
-                // 建立一個隱形的畫布來縮小照片
                 const compressCanvas = document.createElement('canvas');
                 compressCanvas.width = width;
                 compressCanvas.height = height;
                 const compressCtx = compressCanvas.getContext('2d');
                 compressCtx.drawImage(tempImg, 0, 0, width, height);
 
-                // 將壓縮後的安全圖片交給主程式
                 userImg.onload = () => {
                     resetImageState();
                     stageContainer.style.display = 'block';
@@ -119,9 +125,9 @@
                         downloadBtn.style.display = 'inline-block';
                         phoneTip.style.display = 'none';
                     }
-                    draw();
+                    draw(true); // 第一次加載，直接產生圖片
                 };
-                userImg.src = compressCanvas.toDataURL('image/jpeg', 0.85); // 壓縮為 85% 品質的 JPG，極度省記憶體
+                userImg.src = compressCanvas.toDataURL('image/jpeg', 0.85); 
             };
             tempImg.src = event.target.result;
         };
@@ -142,8 +148,10 @@
         imgState.currentPinchScale = 1;
     }
 
-    function draw() {
+    // 核心優化：draw 函數現在接受一個參數，決定是否要「立即生成圖片」
+    function draw(forceGenerateImage = false) {
         if (!imgState.loaded || !frameImg.complete) return;
+        
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.save();
         const finalScale = imgState.baseScale * imgState.userScale * imgState.currentPinchScale;
@@ -155,26 +163,55 @@
         ctx.drawImage(userImg, -userImg.width / 2, -userImg.height / 2);
         ctx.restore();
         ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
-        finalImage.src = canvas.toDataURL('image/png');
+
+        // 如果是強制生成（如剛上傳或停止操作時），立即產生圖片
+        if (forceGenerateImage) {
+            finalImage.src = canvas.toDataURL('image/png');
+            stageContainer.className = 'idle'; // 回復靜止狀態
+        } else {
+            // 如果是在滑動中，先清除先前的計時器，等到不滑了再轉圖片
+            clearTimeout(generateTimeout);
+            generateTimeout = setTimeout(() => {
+                finalImage.src = canvas.toDataURL('image/png');
+                stageContainer.className = 'idle';
+            }, 200); // 停止操作 0.2 秒後轉換圖片
+        }
     }
 
+    // 進入操作狀態
+    function startInteraction() {
+        if (!imgState.loaded) return;
+        stageContainer.className = 'interacting';
+    }
+
+    // 滑桿控制
     scaleSlider.addEventListener('input', (e) => {
+        startInteraction();
         imgState.userScale = e.target.value / 100;
-        draw();
+        draw(false);
+    });
+    scaleSlider.addEventListener('change', () => {
+        draw(true); // 調整完放開滑桿，強制生成圖片
     });
 
+    // 手勢操作控制 (Hammer.js)
     const mc = new Hammer.Manager(finalImage);
     const Pan = new Hammer.Pan({ threshold: 0 });
     const Pinch = new Hammer.Pinch({ threshold: 0 });
     Pinch.recognizeWith(Pan);
     mc.add([Pan, Pinch]);
 
+    // 拖曳開始
+    mc.on("panstart pinchstart", () => {
+        startInteraction();
+    });
+
     mc.on("panmove", (e) => {
         if (!imgState.loaded) return;
         const cssToCanvasScale = canvas.width / stageContainer.offsetWidth;
         imgState.currentX = e.deltaX * cssToCanvasScale;
         imgState.currentY = e.deltaY * cssToCanvasScale;
-        draw();
+        draw(false); // 僅更新畫布，不產生圖片（超順）
     });
 
     mc.on("panend pancancel", () => {
@@ -183,13 +220,13 @@
         imgState.y += imgState.currentY;
         imgState.currentX = 0;
         imgState.currentY = 0;
-        draw();
+        draw(true); // 結束操作，立刻生成圖片供長按儲存
     });
 
     mc.on("pinchmove", (e) => {
         if (!imgState.loaded) return;
         imgState.currentPinchScale = e.scale;
-        draw();
+        draw(false); // 僅更新畫布
         let newSliderValue = imgState.userScale * e.scale * 100;
         scaleSlider.value = Math.max(10, Math.min(200, newSliderValue));
     });
@@ -200,7 +237,7 @@
         imgState.currentPinchScale = 1;
         if(imgState.userScale < 0.1) imgState.userScale = 0.1;
         if(imgState.userScale > 3) imgState.userScale = 3;
-        draw();
+        draw(true); // 結束操作，立刻生成圖片供長按儲存
     });
 
     downloadBtn.addEventListener('click', (e) => {
